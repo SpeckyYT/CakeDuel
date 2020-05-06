@@ -1,0 +1,11 @@
+{
+    "name": "cakeduel",
+    "version": "0.0.1",
+    "description": "A Cake Duel Discord Bot",
+    "main": "src/run.js",
+    "dependencies": {
+        "discord.js": "^12.2.0"
+    },
+    "author": "SpeckyYT",
+    "license": "MIT"
+}
