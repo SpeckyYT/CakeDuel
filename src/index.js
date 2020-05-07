@@ -5,7 +5,12 @@ const bot = new Client();
 require('./handlers/config.js')();
 const config = require('../config.json');
 
-let playing = []
+require('more-array-methods')();
+
+const { request } = require('./util');
+
+let playing = [];
+let searching = [];
 
 bot.on("message", async msg => {
     if(msg.channel.type == "dm") return;
@@ -17,56 +22,34 @@ bot.on("message", async msg => {
     msg.args = msg.content.replace(/\s\s+/g, ' ').toLowerCase().split(' ');
     msg.command = msg.args[0].toLowerCase();
     msg.cmdargs = msg.args.slice(1);
-
-    console.log(msg)
     
     switch(msg.command){
 
         case "start":
-            if(playing.includes(msg.author.id)) return;
-
+            let requester = msg.author;
             let opponent = msg.mentions.users.first();
-            if(opponent?!opponent.bot:false){
-                opponent.send(` ${msg.author} wants to play Cake Duel with you!\nReact if you want to play or not!`)
-                .then(async ms => {
-                    playing.push(msg.author.id);
-                    playing.push(opponent.id);
 
-                    const yes = "👌";
-                    const no = "🇽"
-                    await ms.react(yes);
-                    await ms.react(no);
+            if(playing.includes(requester.id) || opponent ? playing.includes(opponent.id) : false) return;
 
-                    const filter = (r,u) => [yes,no].includes(r.emoji.name) && u.id != bot.user.id;
+            const req = async () => {
+                playing.push(msg.author.id,opponent.id);
 
-                    await ms.awaitReactions(filter,{time: 30000, max:1, errors: ['time']})
-                    .then(async r => {
-                        if(r.get(yes)){
-                            opponent.send("You accepted the game!\nThe game will start soon!");
-                            msg.author.send(`Game with ${opponent} got accepted!\nThe game will start soon!`);
+                await request(bot,requester,opponent);
 
-                            await require('./game/game.js')(bot,msg.author,opponent)
-                            .then(()=>{
-                                [msg.author,opponent].forEach(async u => u.send("Game ended!"));
-                            })
-                            .catch(()=>{
-                                [msg.author,opponent].forEach(async u => u.send("An error occurred"));
-                            })
-                        }else{
-                            opponent.send("Game got denied.");
-                            msg.author.send(`Game with ${opponent} got denied.`)
-                        }
-                    })
-                    .catch(async ()=>{
-                        opponent.send("Time elapsed");
-                        msg.author.send(`Game with ${opponent} got denied`);
-                    })
+                playing = playing.filter(v => !(v.includes(msg.author.id)||v.includes(opponent.id)));
+            }
 
-                    playing = playing.filter(v => !(v.includes(msg.author.id) || v.includes(opponent.id)));
-                })
-
+            if(opponent ? !opponent.bot : false){
+                await req();
             }else{
-                msg.channel.send("Opponent not found, be sure to mention one next time");
+                if(searching.length > 0){
+                    opponent = searching[0];
+                    searching = searching.slice(1);
+                    await req();
+                }else{
+                    msg.channel.send("Waiting for wothly opponent...\nYou will be notified soon...");
+                    searching.push(msg.author);
+                }
             }
         break;
 

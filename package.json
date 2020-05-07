@@ -4,7 +4,8 @@
     "description": "A Cake Duel Discord Bot",
     "main": "src/run.js",
     "dependencies": {
-        "discord.js": "^12.2.0"
+        "discord.js": "^12.2.0",
+        "more-array-methods": "^1.1.2"
     },
     "author": "SpeckyYT",
     "license": "MIT"
