@@ -1,2 +1,2 @@
 # CakeDuel
- A Cake Duel Discord Bot
+A Cake Duel Discord Bot
