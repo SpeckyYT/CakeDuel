@@ -1,4 +1,6 @@
-const deck = [
+const { MessageEmbed } = require("discord.js");
+
+let stddeck = [
     "sol","sol","sol","sol","sol", // 5 soldiers
     "arc","arc","arc","arc", // 4 archers
     "def","def","def","def", // 4 defenders
@@ -7,7 +9,7 @@ const deck = [
     "wol" // wolfy
 ];
 
-const special = [ // UNUSED ATM
+let spcdeck = [ // UNUSED ATM
     "ass", // Assasin
     "sco", // Scout
     "sum", // Summoner
@@ -18,30 +20,34 @@ const special = [ // UNUSED ATM
     "pro", // Professor Baacrates
     "age", // Agent:U
     "pie"  // Pierrot Sheepington
-]
+];
 
 module.exports = async (bot, player1, player2) => {
     let game = {
         bout: 0,
         turn: 0,
 
-        deck: deck,
-        special: special,
+        deck: [],
+        special: [],
         dp: [], // discard pile of cards
 
         p1: {
             hand: [],
             cakes: 0,
-            trophies: 0
+            trophies: 0,
+            user: player1
         },
 
         p2: {
             hand: [],
             cakes: 0,
-            trophies: 0
+            trophies: 0,
+            user: player2
         },
 
         continue: true,
+        lastplayer: Math.round(Math.random())+1,
+        lastaction: [],
         pass: 0,
         challenge: false,
 
@@ -51,80 +57,90 @@ module.exports = async (bot, player1, player2) => {
         },
 
         playerExists(player){
-            if(!this["p"+player]) throw "Error at function 'resupply', number is invalid";
+            if(!this['p'+player]) throw "Error, player number is invalid";
         },
 
-        async startTurn(player){
-            this.turn++;
-            await player1.send(`This is your hand: ${this.p1.hand.join(', ')}`);
-            await player2.send(`This is your hand: ${this.p2.hand.join(', ')}`);
-
-            // ATKR: Attack Claim / Pass
-            await require('./game/whatToDo')(player1,["claim attack","pass"]);
-
-            // DEFR: Challenge Attack / Accept / Block Claim
-            await require('./game/whatToDo')(player2,["challenge attack","accept","claim block"]);
-
-            // ATKR: Challenge Block / Accept
-            await require('./game/whatToDo')(player1,["challenge block","accept"]);
-
-            // Resolve
-
-            // Check Conditions
-            if(
-                (!this.p1.cakes || !this.p2.cakes) || // When one of the players has no cakes 
-                (this.pass > 1) ||  // When both player pass
-                (this.challenge) || // When a player challenges
-                (this.turn > 20) // When a bout is too long [DEBUG, CAN BE REMOVED ONCE EVERYTHING IS GOOD]
-            ){
-                this.continue = false;
-            }
-
-            // Resupply
-            game.resupply(player);
-            game.resupply(this.otherPlayer(player));
-
-            if(this.continue){
-                await this.startTurn(this.otherPlayer(player));
-            }else{
-                if(this.p1.cakes > this.p2.cakes){
-                    await player1.send("You won the bout :tada:");
-                    await player2.send("You lost the bout...");
-                }else{
-                    await player2.send("You won the bout :tada:");
-                    await player1.send("You lost the bout...");
-                }
-            }
+        returnPlayer(player){
+            this.playerExists(player);
+            return this['p'+player].user;
         },
 
-        async startBout(player){
-            if(!player) player = Math.round(Math.random())+1;
-            this.bout++;
-            this.deck = deck.shuffle();
-            this.dp = [];
-            this.p1.hand = [];
-            this.p2.hand = [];
-            game.resupply(1);
-            game.resupply(2);
-            this.p1.cakes = (player === 1 ? 3 : 4);
-            this.p2.cakes = (player === 2 ? 3 : 4);
-            this.continue = true;
-            await this.startTurn(player);
+        announce(text){
+            [player1,player2].forEach(u => u.send(text).catch(()=>{}));
+        },
+
+        async whatToDo(player,options){
+            return await player.send("What do you want to do?\n"+
+            options.join(', ').split(' ').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ')) // Capitalizes every word
+            .then(async msg => {
+                const emo = ["🇦","🇧","👌","⏩"]
+                if(options.sincludes('attack')) msg.react(emo[0]);
+                if(options.sincludes('block')) msg.react(emo[1]);
+                if(options.sincludes('accept')) msg.react(emo[2]);
+                if(options.sincludes('pass')) msg.react(emo[3]);
+
+                const filter = (r,u) => emo.includes(r.emoji.name) && u.id === player.id;
+                let runned = false;
+
+                return await msg.awaitReactions(filter,{time: 30000, max:1, errors: ['time']})
+                .then(e => {
+                    runned = true;
+                    return e.first ? e.first().emoji.name : e.emoji.name;
+                })
+                .catch(async e => {
+                    if(runned){
+                        console.error(e);
+                        this.announce("Unexpected error happened");
+                    }
+
+                })
+            })
+        },
+
+        convertAction(emoji,timeout){
+            if(emoji == '🇦') return 'attack';
+            if(emoji == '🇧') return 'block';
+            if(emoji == '👌') return 'accept';
+            if(emoji == '⏩') return 'pass';
+            return timeout;
+        },
+
+        async playerEmbed(player){
+            this.playerExists(player);
+
+            const { deck, bout, lastaction } = this;
+
+            [1,2].forEach(async p => {
+                const { cakes, hand } = this['p'+p];
+                const user = this.returnPlayer(p);
+                const otheruser = this.returnPlayer(this.otherPlayer(p));
+
+                const embed = new MessageEmbed()
+                .setColor(player === 1 ? 'RED' : 'BLUE')
+                .setAuthor('Cake Duel', bot.user.avatarURL())
+                .addField("Current active player", player === p ? user.tag : otheruser.tag)
+                .addField('Bout', bout, true)
+                .addField('Cards in the Deck', deck.length, true)
+                .addField('Your Hand', hand.join(', '), true)
+                .addField('Your Cakes', '#'.repeat(cakes)+'0'.repeat(7-cakes), true)
+                .addField('Last Action', lastaction[0] ? `Player ${lastaction[0]} ` : 'None', true);
+
+                user.send(embed);
+            })
         },
 
         resupply(player){
             this.playerExists(player);
-            let { hand } = this["p"+player];
-            let { deck } = this;
-            while(hand.length < 4 && deck.length > 0){
-                hand.push(deck[0]);
-                deck = deck.slice(1);
+            let { hand } = this['p'+player];
+            while(hand.length < 4 && this.deck.length > 0){
+                hand.push(this.deck[0]);
+                this.deck = this.deck.slice(1);
             }
         },
 
         discardCards(player,cards){
             this.playerExists(player);
-            let { hand } = this["p"+player];
+            let { hand } = this['p'+player];
             let { dp } = this;
             if(Array.isArray(cards)){
                 for(card in cards){
@@ -139,21 +155,95 @@ module.exports = async (bot, player1, player2) => {
                     dp.push(cards);
                 }
             }
+        },
+
+        async startTurn(player){
+            this.turn++;
+            
+            this.lastplayer = this.otherPlayer(player);
+
+            this.resupply(1);
+            this.resupply(2);
+
+            let action;
+
+            // ATKR: Attack Claim / Pass
+            this.playerEmbed(player);
+
+            action = await this.whatToDo(this.returnPlayer(player),["claim attack","pass"]);
+            action = this.convertAction(action,'pass');
+
+            if(action == 'pass'){ 
+                this.pass++;
+            }else{
+                this.pass = 0;
+
+                // DEFR: Challenge Attack / Accept / Block Claim
+                this.playerEmbed(this.otherPlayer(player));
+
+                await this.whatToDo(this.returnPlayer(this.otherPlayer(player)),["challenge attack","accept","claim block"]);
+                action = this.convertAction(action,'accept');
+
+                // ATKR: Challenge Block / Accept
+                this.playerEmbed(player);
+
+                await this.whatToDo(this.returnPlayer(player),["challenge block","accept"]);
+                action = this.convertAction(action,'accept');
+
+                // Resolve
+            }
+
+            // Check Conditions
+            if(
+                (this.p1.cakes <= 0 || this.p2.cakes <= 0) // When one of the players has no cakes 
+                ||
+                (this.pass > 1)  // When both player pass
+                ||
+                (this.challenge) // When a player challenges
+            ){
+                this.continue = false;
+            }
+
+            this.resupply(player);
+            this.resupply(this.otherPlayer(player));
+
+            if(!this.continue){
+                if(this.p1.cakes > this.p2.cakes){
+                    await player1.send("You won the bout :tada:");
+                    await player2.send("You lost the bout...");
+                    this.lastplayer = 1;
+                }else{
+                    await player2.send("You won the bout :tada:");
+                    await player1.send("You lost the bout...");
+                    this.lastplayer = 2;
+                }
+            }
+        },
+
+        async startBout(player){
+            this.lastplayer = player;
+            this.bout++;
+            this.turn = 0;
+            this.pass = 0;
+            this.deck = [...stddeck.shuffle()];
+            this.special = [...spcdeck.shuffle()];
+            this.dp = [];
+            this.p1.hand = [];
+            this.p2.hand = [];
+            this.p1.cakes = (player === 1 ? 3 : 4);
+            this.p2.cakes = (player === 2 ? 3 : 4);
+            this.continue = true;
+            while(this.continue){
+                await this.startTurn(this.lastplayer); // Alternates each turn
+            }
+        },
+
+        async startGame(){
+            while(this.p1.trophies < 3 && this.p2.trophies < 3){
+                await this.startBout(this.otherPlayer(this.lastplayer)); // alternates player
+            }
         }
     }
 
-    let play = true;
-
-    while(game.bout < 5){
-        await game.startBout();
-    }
-    // this code below is only for testing
-    game.discardCards(1,['wol','sol','sol','arc']);
-    game.discardCards(2,'wiz');
-    game.resupply(1);
-    game.resupply(2);
-    console.log(game);
-
-
-    play = false;
+    await game.startGame();
 }

@@ -17,6 +17,7 @@ require('more-array-methods')();
 let playing = [];
 let searching = new Collection();
 
+// Commands event
 bot.on("message", async msg => {
     if(msg.author.bot) return;
 
@@ -77,7 +78,7 @@ bot.on("message", async msg => {
     }
 })
 
-
+// Login
 bot.login(config.token)
 .then(()=>{
     console.log("Logged in successfully")
