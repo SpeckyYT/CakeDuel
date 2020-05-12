@@ -2,7 +2,7 @@
     "name": "cakeduel",
     "version": "0.0.1",
     "description": "A Cake Duel Discord Bot",
-    "main": "src/run.js",
+    "main": "start.js",
     "dependencies": {
         "discord.js": "^12.2.0",
         "more-array-methods": "^1.1.2"
